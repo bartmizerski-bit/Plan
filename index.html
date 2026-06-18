@@ -76,7 +76,12 @@
     </div>
 
     <details id="ust">
-      <summary>Ustawienia (grupa, promotor)</summary>
+      <summary>Ustawienia</summary>
+      <label for="worker">Adres Twojego Cloudflare Workera</label>
+      <input type="url" id="worker" placeholder="https://plan-apol.twojnick.workers.dev" />
+      <p class="small" style="margin-top:4px">
+        Wpisz raz, zapisze się w przeglądarce. Bez tego aplikacja nie pobierze danych.
+      </p>
       <label for="grupa">Grupa ćwiczeniowa</label>
       <input type="text" id="grupa" value="sskp2024II_F1" />
       <label for="sem">Promotor seminarium (nazwisko)</label>
@@ -85,32 +90,6 @@
 
     <button id="gen">Generuj rozkład</button>
     <div class="status" id="status">Wybierz daty zjazdu i kliknij „Generuj rozkład”.</div>
-    <p class="small" style="margin-top:6px;text-align:right">
-      <a href="#" id="link-recznie" style="color:var(--mute)">Tryb ręczny (gdy pobieranie nie działa)</a>
-    </p>
-  </div>
-
-  <div class="card" id="paste-card" style="display:none">
-    <p class="small" style="margin-top:0">
-      Tryb awaryjny — gdy wszystkie proxy padły. Otwierasz URL w nowej karcie,
-      kopiujesz JSON, wracasz i wklejasz.
-    </p>
-    <label for="url-out">1. URL do otwarcia</label>
-    <textarea id="url-out" readonly style="min-height:60px"></textarea>
-    <div class="actions" style="grid-template-columns:1fr 1fr">
-      <button id="url-open" class="secondary">Otwórz w nowej karcie</button>
-      <button id="url-copy" class="secondary">Kopiuj URL</button>
-    </div>
-    <label for="paste" style="margin-top:14px">2. Wklej tu odpowiedź JSON z otwartej karty</label>
-    <textarea id="paste" placeholder='{"status":"SUCCESS","result":[...]}'></textarea>
-    <div class="actions" style="grid-template-columns:1fr 1fr">
-      <button id="paste-from-clip" class="secondary">Wklej ze schowka</button>
-      <button id="paste-go">Użyj JSON</button>
-    </div>
-    <p class="small" style="margin-top:8px">
-      W otwartej karcie: przytrzymaj palec na tekście → „Zaznacz wszystko” → „Kopiuj”.
-      Wróć tu i naciśnij „Wklej ze schowka”, a potem „Użyj JSON”.
-    </p>
   </div>
 
   <div class="card" id="wynik-card" style="display:none">
