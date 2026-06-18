@@ -3,14 +3,13 @@
 //  Logika: pobranie, filtrowanie, rysowanie na <canvas>, zapis/PNG.
 // =========================================================================
 
-const ENDPOINT = "https://wu.apol.edu.pl/wsrest/rest/phz/harmonogram/zajecia";
-// Lista publicznych proxy CORS – aplikacja próbuje je po kolei jako fallback.
-// Jeśli żaden nie zadziała, użytkownik dostaje URL do skopiowania (zawsze działa).
-const PROXY_LISTA = [
-  (u) => "https://corsproxy.io/?url=" + encodeURIComponent(u),
-  (u) => "https://api.allorigins.win/raw?url=" + encodeURIComponent(u),
-  (u) => "https://cors.lol/?url=" + encodeURIComponent(u),
-];
+const ENDPOINT_PATH = "/wsrest/rest/phz/harmonogram/zajecia";
+// Adres Twojego Cloudflare Workera (zapisywany w localStorage po pierwszym wpisaniu).
+// Przykład: https://plan-apol.bartek.workers.dev
+const WORKER_KEY = "apol_worker_url";
+function workerUrl() {
+  return (localStorage.getItem(WORKER_KEY) || "").trim().replace(/\/+$/, "");
+}
 
 // Komplet grup Twojego rocznika (Kryminologia 2024II)
 const GROUP_IDS = [
@@ -32,56 +31,34 @@ const za7 = new Date(dzis.getTime() + 6*24*3600*1000);
 $("d-od").value = dzis.toISOString().slice(0,10);
 $("d-do").value = za7.toISOString().slice(0,10);
 
+$("worker").value = localStorage.getItem(WORKER_KEY) || "";
+$("worker").addEventListener("change", () => {
+  const v = $("worker").value.trim().replace(/\/+$/, "");
+  if (v) localStorage.setItem(WORKER_KEY, v);
+  else localStorage.removeItem(WORKER_KEY);
+});
+
+["grupa","sem"].forEach(id => {
+  const k = "apol_" + id;
+  const saved = localStorage.getItem(k);
+  if (saved !== null) $(id).value = saved;
+  $(id).addEventListener("change", () => localStorage.setItem(k, $(id).value));
+});
+
+// Otwórz panel ustawień automatycznie, gdy Worker nie jest jeszcze skonfigurowany.
+if (!workerUrl()) {
+  $("ust").open = true;
+  ustaw_blad("Wpisz adres swojego Cloudflare Workera w „Ustawieniach” (raz na zawsze).");
+}
+
 $("gen").addEventListener("click", generuj);
-$("link-recznie").addEventListener("click", (ev) => {
-  ev.preventDefault();
-  $("url-out").value = budujUrl($("d-od").value, $("d-do").value);
-  $("paste-card").style.display = "";
-  $("paste-card").scrollIntoView({ behavior: "smooth", block: "start" });
-});
-$("paste-go").addEventListener("click", () => {
-  try {
-    const surowe = JSON.parse($("paste").value);
-    const lista = surowe.result || surowe;
-    if (!Array.isArray(lista)) throw new Error("Oczekiwano tablicy „result”.");
-    pokaz(lista);
-  } catch (e) { ustaw_blad("Nie udało się odczytać JSON: " + e.message); }
-});
-
-$("url-open").addEventListener("click", () => {
-  const u = $("url-out").value || budujUrl($("d-od").value, $("d-do").value);
-  $("url-out").value = u;
-  window.open(u, "_blank", "noopener");
-});
-
-$("url-copy").addEventListener("click", async () => {
-  const u = $("url-out").value || budujUrl($("d-od").value, $("d-do").value);
-  $("url-out").value = u;
-  try {
-    await navigator.clipboard.writeText(u);
-    ustaw_status("URL skopiowany do schowka.");
-  } catch {
-    $("url-out").select();
-    ustaw_status("Zaznacz tekst URL i skopiuj ręcznie (Ctrl/Cmd+C).");
-  }
-});
-
-$("paste-from-clip").addEventListener("click", async () => {
-  try {
-    const txt = await navigator.clipboard.readText();
-    if (!txt) return ustaw_blad("Schowek jest pusty.");
-    $("paste").value = txt;
-    ustaw_status("Wklejono. Kliknij „Użyj JSON”.");
-  } catch (e) {
-    ustaw_blad("Przeglądarka nie pozwoliła odczytać schowka. Wklej ręcznie: przytrzymaj palec w polu poniżej → „Wklej”.");
-  }
-});
-
 $("save").addEventListener("click", zapiszPNG);
 $("share").addEventListener("click", udostepnij);
 
 // ----------------------------- pobieranie ---------------------------------
 function budujUrl(dataOd, dataDo) {
+  const baza = workerUrl();
+  if (!baza) return null;   // brak skonfigurowanego Workera
   const p = new URLSearchParams();
   p.set("_dc", Date.now().toString());
   GROUP_IDS.forEach(g => p.append("idGrupa", g));
@@ -94,7 +71,7 @@ function budujUrl(dataOd, dataDo) {
   p.set("page","1");
   p.set("start","0");
   p.set("limit","2000");
-  return ENDPOINT + "?" + p.toString();
+  return baza + ENDPOINT_PATH + "?" + p.toString();
 }
 
 async function pobierz(url) {
@@ -109,26 +86,24 @@ async function generuj() {
   const dOd = $("d-od").value, dDo = $("d-do").value;
   if (!dOd || !dDo) return ustaw_blad("Podaj obie daty.");
   if (dDo < dOd)    return ustaw_blad("„Data do” jest wcześniejsza niż „Data od”.");
+  const url = budujUrl(dOd, dDo);
+  if (!url) {
+    $("ust").open = true;
+    $("worker").focus();
+    return ustaw_blad("Najpierw wpisz adres swojego Cloudflare Workera w „Ustawieniach”.");
+  }
 
   $("gen").disabled = true;
-  const url = budujUrl(dOd, dDo);
-  let dane = null;
-
-  for (let i = 0; i < PROXY_LISTA.length && !dane; i++) {
-    ustaw_status(`Pobieranie planu (${i+1}/${PROXY_LISTA.length})…`);
-    try { dane = await pobierz(PROXY_LISTA[i](url)); }
-    catch (_) { /* próbujemy następny */ }
+  ustaw_status("Pobieranie planu…");
+  try {
+    const dane = await pobierz(url);
+    pokaz(dane);
+  } catch (e) {
+    ustaw_blad("Nie udało się pobrać planu: " + e.message +
+               "\nSprawdź adres Workera w „Ustawieniach”.");
+  } finally {
+    $("gen").disabled = false;
   }
-
-  $("gen").disabled = false;
-  if (!dane) {
-    $("paste-card").style.display = "";
-    $("url-out").value = url;
-    $("paste-card").scrollIntoView({ behavior: "smooth", block: "start" });
-    ustaw_blad("Wszystkie proxy padły. Użyj trybu awaryjnego poniżej.");
-    return;
-  }
-  pokaz(dane);
 }
 
 // ----------------------------- filtrowanie --------------------------------
@@ -468,3 +443,4 @@ async function udostepnij() {
 // ----------------------------- pomocnicze ---------------------------------
 function ustaw_status(t)  { const s = $("status"); s.className = "status";     s.textContent = t; }
 function ustaw_blad(t)    { const s = $("status"); s.className = "status err"; s.textContent = t; }
+      
